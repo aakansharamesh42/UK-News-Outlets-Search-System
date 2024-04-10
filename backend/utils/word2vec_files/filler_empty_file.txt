@@ -1,0 +1,3 @@
+Here must be the files word2vec_{dimension}_{window}.model,
+word2vec_{dimension}_{window}.model.syn1neg.npy and
+word2vec_{dimension}_{window}.model.wv.vectors.npy.

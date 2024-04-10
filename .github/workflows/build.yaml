@@ -1,0 +1,58 @@
+name: Deploy ttds18
+on:
+  push:
+    branches:
+      - deploy
+jobs:
+  deploy:
+    permissions:
+        contents: 'read'
+        id-token: 'write'
+        
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: code checkout
+      uses: actions/checkout@v4
+
+    - name: authenticate gcloud
+      uses: google-github-actions/auth@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT }}
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: install gcloud cli
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT }}
+
+    - name: build and push docker image
+      env:
+        GOOGLE_PROJECT: ${{ secrets.GCP_PROJECT }}
+      run: |
+        gcloud auth configure-docker europe-west2-docker.pkg.dev
+        docker build -t europe-west2-docker.pkg.dev/grounded-hull-413601/ttds/ttds18:latest .
+        docker push europe-west2-docker.pkg.dev/grounded-hull-413601/ttds/ttds18:latest
+
+    - name: deploy to cloud run
+      env:
+        GOOGLE_PROJECT: ${{ secrets.GCP_PROJECT }}
+      run: |
+        SERVICE_NAME="ttds18"
+        IMAGE_NAME="europe-west2-docker.pkg.dev/grounded-hull-413601/ttds/ttds18:latest"
+        EXISTING_SERVICE=$(gcloud run services list --platform managed --region europe-west1 --format="value(SERVICE)" | grep $SERVICE_NAME || true)
+        if [ -z "$EXISTING_SERVICE" ]; then
+          echo "Service does not exist, deploying..."
+          gcloud run deploy $SERVICE_NAME \
+            --image=$IMAGE_NAME \
+            --platform=managed \
+            --region=europe-west1 \
+            --allow-unauthenticated
+        else
+          echo "Service exists, updating..."
+          gcloud run services update $SERVICE_NAME \
+            --image=$IMAGE_NAME \
+            --platform=managed \
+            --region=europe-west1
+        fi
